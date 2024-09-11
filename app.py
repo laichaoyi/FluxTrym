@@ -27,10 +27,10 @@ def load_captioning(uploaded_files, concept_sentence):
     updates = []
     if len(uploaded_images) <= 1:
         raise gr.Error(
-            "Làm ơn tải lên ít nhất 2 tấm ảnh (mặc định là 4 tới 30 ảnh nhưng tối đa chỉ 150 ảnh)"
+            "Please upload at least 2 images to train your model (the ideal number with default settings is between 4-30)"
         )
     elif len(uploaded_images) > MAX_IMAGES:
-        raise gr.Error(f"Tạm thời, tối đa {MAX_IMAGES} ảnh hoặc ít hơn đc phép để train model lora")
+        raise gr.Error(f"For now, only {MAX_IMAGES} or less images are allowed for training")
     # Update for the captioning_area
     # for _ in range(3):
     updates.append(gr.update(visible=True))
@@ -184,15 +184,22 @@ def gen_sh(
     timestep_sampling,
     guidance_scale,
     vram,
+    sample_prompts,
+    sample_every_n_steps,
 ):
 
-    print(f"gen_sh: network_dim:{network_dim}, max_train_epochs={max_train_epochs}, save_every_n_epochs={save_every_n_epochs}, timestep_sampling={timestep_sampling}, guidance_scale={guidance_scale}, vram={vram},")
+    print(f"gen_sh: network_dim:{network_dim}, max_train_epochs={max_train_epochs}, save_every_n_epochs={save_every_n_epochs}, timestep_sampling={timestep_sampling}, guidance_scale={guidance_scale}, vram={vram}, sample_prompts={sample_prompts}, sample_every_n_steps={sample_every_n_steps}")
+
 
     line_break = "\\"
     file_type = "sh"
     if sys.platform == "win32":
         line_break = "^"
         file_type = "bat"
+
+    sample = ""
+    if len(sample_prompts) > 0 and sample_every_n_steps > 0:
+        sample = f"""--sample_prompts={resolve_path('sample_prompts.txt')} --sample_every_n_steps="{sample_every_n_steps}" {line_break}"""
 
     pretrained_model_path = resolve_path("models/unet/flux1-dev.sft")
     clip_path = resolve_path("models/clip/clip_l.safetensors")
@@ -237,7 +244,7 @@ def gen_sh(
   --save_precision bf16 {line_break}
   --network_module networks.lora_flux {line_break}
   --network_dim {network_dim} {line_break}
-  {optimizer}
+  {optimizer}{sample}
   --learning_rate {learning_rate} {line_break}
   --cache_text_encoder_outputs {line_break}
   --cache_text_encoder_outputs_to_disk {line_break}
@@ -286,10 +293,20 @@ def update_total_steps(max_train_epochs, num_repeats, images):
     except:
         print("")
 
+def get_samples():
+    try:
+        samples_path = resolve_path_without_quotes('outputs/sample')
+        files = [os.path.join(samples_path, file) for file in os.listdir(samples_path)]
+        files.sort(key=lambda file: os.path.getctime(file), reverse=True)
+        print(f"files={files}")
+        return files
+    except:
+        return []
 
 def start_training(
     train_script,
     train_config,
+    sample_prompts,
 ):
     # write custom script and toml
     os.makedirs("models", exist_ok=True)
@@ -308,6 +325,9 @@ def start_training(
         file.write(train_config)
     gr.Info(f"Generated dataset.toml")
 
+    with open('sample_prompts.txt', 'w', encoding='utf-8') as file:
+        file.write(sample_prompts)
+    gr.Info(f"Generated sample_prompts.txt")
 
     # Train
     if sys.platform == "win32":
@@ -320,10 +340,10 @@ def start_training(
     env['PYTHONIOENCODING'] = 'utf-8'
     runner = LogsViewRunner()
     cwd = os.path.dirname(os.path.abspath(__file__))
-    gr.Info(f"Đã bắt đầu train lora")
+    gr.Info(f"Started training")
     yield from runner.run_command([command], cwd=cwd)
     yield runner.log(f"Runner: {runner}")
-    gr.Info(f"Quá trình train đã hoàn tất. Vui lòng kiểm tra thư mục output để lấy file lora.", duration=None)
+    gr.Info(f"Training Complete. Check the outputs folder for the LoRA files.", duration=None)
 
 def update(
     lora_name,
@@ -339,6 +359,8 @@ def update(
     guidance_scale,
     vram,
     num_repeats,
+    sample_prompts,
+    sample_every_n_steps,
 ):
     output_name = slugify(lora_name)
     dataset_folder = str(f"datasets/{output_name}")
@@ -354,6 +376,8 @@ def update(
         timestep_sampling,
         guidance_scale,
         vram,
+        sample_prompts,
+        sample_every_n_steps,
     )
     toml = gen_toml(
         dataset_folder,
@@ -365,6 +389,9 @@ def update(
 
 def loaded():
     print("launched")
+
+def update_sample(concept_sentence):
+    return gr.update(value=concept_sentence)
 
 theme = gr.themes.Monochrome(
     text_size=gr.themes.Size(lg="18px", md="15px", sm="13px", xl="22px", xs="12px", xxl="24px", xxs="9px"),
@@ -440,32 +467,34 @@ with gr.Blocks(elem_id="app", theme=theme, css=css, fill_width=True) as demo:
     with gr.Row(elem_id='container'):
         with gr.Column():
             gr.Markdown(
-                """# Bước 1. Thông tin của LoRA
-<p style="margin-top:0">Cài đặt tham số cho LoRA.</p>
+                """# Step 1. LoRA Info
+<p style="margin-top:0">Configure your LoRA train settings.</p>
 """, elem_classes="group_padding")
             lora_name = gr.Textbox(
-                label="Tên của LoRA",
-                info="Đây là tên duy nhất, không đụng hàng",
-                placeholder="ví dụ: Persian Miniature Painting style, Cat Toy",
+                label="The name of your LoRA",
+                info="This has to be a unique name",
+                placeholder="e.g.: Persian Miniature Painting style, Cat Toy",
             )
             concept_sentence = gr.Textbox(
-                label="Một từ hoặc đoạn câu Trigger",
-                info="Một từ hoặc đoạn câu Trigger được dùng",
+                label="Trigger word/sentence",
+                info="Trigger word or sentence to be used",
                 placeholder="uncommon word like p3rs0n or trtcrd, or sentence like 'in the style of CNSTLL'",
                 interactive=True,
             )
-            vram = gr.Radio(["20G", "16G", "12G" ], value="20G", label="VRAM (chọn bộ nhớ card đồ họa phù hợp)", interactive=True)
-            num_repeats = gr.Number(value=10, precision=0, label="Số lần lặp trên mỗi hình", interactive=True)
-            max_train_epochs = gr.Number(label="Số Epoch tối đa", value=16, interactive=True)
-            total_steps = gr.Number(0, interactive=False, label="Tổng số bước train (đề xuất khoảng 3000 bước)")
-            with gr.Accordion("Tùy chỉnh nâng cao", open=False):
+            vram = gr.Radio(["20G", "16G", "12G" ], value="20G", label="VRAM", interactive=True)
+            num_repeats = gr.Number(value=10, precision=0, label="Repeat trains per image", interactive=True)
+            max_train_epochs = gr.Number(label="Max Train Epochs", value=16, interactive=True)
+            total_steps = gr.Number(0, interactive=False, label="Expected training steps")
+            sample_prompts = gr.Textbox("", lines=5, label="Sample Image Prompts (Separate with new lines)", interactive=True)
+            sample_every_n_steps = gr.Number(0, precision=0, label="Sample Image Every N Steps", interactive=True)
+            with gr.Accordion("Advanced options", open=False):
                 #resolution = gr.Number(label="Resolution", value=512, minimum=512, maximum=1024, step=512)
                 seed = gr.Number(label="Seed", value=42, interactive=True)
                 workers = gr.Number(label="Workers", value=2, interactive=True)
                 learning_rate = gr.Textbox(label="Learning Rate", value="8e-4", interactive=True)
                 #learning_rate = gr.Number(label="Learning Rate", value=4e-4, minimum=1e-6, maximum=1e-3, step=1e-6)
 
-                save_every_n_epochs = gr.Number(label="Lưu LoRA khi epoch thứ mấy được tạo ra", value=4, interactive=True)
+                save_every_n_epochs = gr.Number(label="Save every N epochs", value=4, interactive=True)
 
                 guidance_scale = gr.Number(label="Guidance Scale", value=1.0, interactive=True)
 
@@ -473,22 +502,23 @@ with gr.Blocks(elem_id="app", theme=theme, css=css, fill_width=True) as demo:
 
     #            steps = gr.Number(label="Steps", value=1000, minimum=1, maximum=10000, step=1)
                 network_dim = gr.Number(label="LoRA Rank", value=4, minimum=4, maximum=128, step=4, interactive=True)
-                resolution = gr.Radio([512, 1024], value=512, label="Điều chỉnh kích thước ảnh dataset tối thiểu")
+                resolution = gr.Number(value=512, precision=0, label="Resize dataset images")
         with gr.Column():
             gr.Markdown(
-                """# Bước 2. Dataset
-<p style="margin-top:0">Đảm bảo file caption phải có từ trigger bên trong.</p>
+                """# Step 2. Dataset
+<p style="margin-top:0">Make sure the captions include the trigger word.</p>
 """, elem_classes="group_padding")
-            images = gr.File(
-                file_types=["image", ".txt"],
-                label="Tải nhiều ảnh lên",
-                file_count="multiple",
-                interactive=True,
-                visible=True,
-                scale=1,
-            )
+            with gr.Group():
+                images = gr.File(
+                    file_types=["image", ".txt"],
+                    label="Upload your images",
+                    file_count="multiple",
+                    interactive=True,
+                    visible=True,
+                    scale=1,
+                )
             with gr.Group(visible=False) as captioning_area:
-                do_captioning = gr.Button("Tạo caption tự động với Florence-2")
+                do_captioning = gr.Button("Add AI captions with Florence-2")
                 output_components.append(captioning_area)
                 #output_components = [captioning_area]
                 caption_list = []
@@ -516,15 +546,18 @@ with gr.Blocks(elem_id="app", theme=theme, css=css, fill_width=True) as demo:
                     caption_list.append(locals()[f"caption_{i}"])
         with gr.Column():
             gr.Markdown(
-                """# Bước 3. Train LoRA
-<p style="margin-top:0">Nhấn start để bắt đầu train.</p>
+                """# Step 3. Train
+<p style="margin-top:0">Press start to start training.</p>
 """, elem_classes="group_padding")
-            start = gr.Button("Bắt đầu train", visible=False)
+            start = gr.Button("Start training", visible=False)
             output_components.append(start)
             train_script = gr.Textbox(label="Train script", max_lines=100, interactive=True)
             train_config = gr.Textbox(label="Train config", max_lines=100, interactive=True)
     with gr.Row():
         terminal = LogsView(label="Train log", elem_id="terminal")
+    with gr.Row():
+        gallery = gr.Gallery(get_samples, label="Samples", every=10, columns=6)
+
 
     dataset_folder = gr.State()
 
@@ -542,6 +575,8 @@ with gr.Blocks(elem_id="app", theme=theme, css=css, fill_width=True) as demo:
         guidance_scale,
         vram,
         num_repeats,
+        sample_prompts,
+        sample_every_n_steps,
     ]
 
 
@@ -595,11 +630,15 @@ with gr.Blocks(elem_id="app", theme=theme, css=css, fill_width=True) as demo:
         outputs=[total_steps]
     )
 
+
+    concept_sentence.change(fn=update_sample, inputs=[concept_sentence], outputs=sample_prompts)
+
     start.click(fn=create_dataset, inputs=[dataset_folder, resolution, images] + caption_list, outputs=dataset_folder).then(
         fn=start_training,
         inputs=[
             train_script,
-            train_config
+            train_config,
+            sample_prompts,
         ],
         outputs=terminal,
     )
