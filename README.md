@@ -1,7 +1,7 @@
 # FluxTrym
 Dead simple web UI for training FLUX LoRA with LOW VRAM (12GB/16GB/20GB) support.
 
-- **Frontend:**  The WebUI forked from FluxGym (Gradio UI created by https://github.com/cocktailpeanut/fluxgym/tree/main) but i customized it with my ideas
+- **Frontend:**  The WebUI forked from FluxGym (Gradio UI created by https://github.com/cocktailpeanut/fluxgym/) but i customized it with my ideas
 - **Backend:** The Training script powered by [Kohya Scripts](https://github.com/kohya-ss/sd-scripts)
 
 ## 2. Install Manually
