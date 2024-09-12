@@ -37,18 +37,20 @@ def clear_cache():
     cache_dir = os.path.expanduser(r'~\AppData\Local\Temp\gradio')  # Thư mục cache cần xóa
     program_root = os.path.dirname(os.path.abspath(__file__))  # Thư mục gốc của chương trình
     outputs_dir = os.path.join(program_root, 'outputs')  # Thư mục outputs nằm trong thư mục chính của chương trình
+    ftcache_dir = os.path.join(program_root, 'cache')  # Thư mục cache
+    datasets_dir = os.path.join(program_root, 'datasets')  # Thư mục datasets
 
     # Xóa thư mục cache
     if os.path.exists(cache_dir):
         try:
-            shutil.rmtree(cache_dir)  # Xóa toàn bộ thư mục cache
+            shutil.rmtree(cache_dir)  # Xóa toàn bộ thư mục tạm Gradio
             cache_status = "Cache folder and "
         except Exception as e:
             cache_status = f"Error clearing cache: {str(e)}"
     else:
         cache_status = "Cache folder not found."
 
-    # Xóa nội dung bên trong thư mục outputs, nhưng giữ lại thư mục outputs
+    # Xóa nội dung bên trong thư mục outputs
     if os.path.exists(outputs_dir):
         try:
             clear_directory(outputs_dir)  # Xóa toàn bộ nội dung bên trong outputs
@@ -57,6 +59,26 @@ def clear_cache():
             outputs_status = f"Error clearing outputs: {str(e)}"
     else:
         outputs_status = "Outputs folder not found."
+
+    # Xóa nội dung bên trong thư mục cache FluxTrym
+    if os.path.exists(ftcache_dir):
+        try:
+            clear_directory(ftcache_dir)  # Xóa toàn bộ nội dung bên trong cache
+            outputs_status = "Cache cleared successfully!"
+        except Exception as e:
+            outputs_status = f"Error clearing outputs: {str(e)}"
+    else:
+        outputs_status = "FluxTrym Cache folder not found."    
+
+    # Xóa nội dung bên trong thư mục datasets
+    if os.path.exists(datasets_dir):
+        try:
+            clear_directory(datasets_dir)  # Xóa toàn bộ nội dung bên trong outputs
+            outputs_status = "Datasets cleared successfully!"
+        except Exception as e:
+            outputs_status = f"Error clearing outputs: {str(e)}"
+    else:
+        outputs_status = "FluxTrym Datasets folder not found."    
 
     # Trả về thông báo tổng hợp
     return gr.Info(f"{cache_status} {outputs_status}", duration=3)
