@@ -3,6 +3,7 @@ os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 import sys
 import subprocess
 
+
 # Add the current working directory to the Python path
 sys.path.insert(0, os.getcwd())
 
@@ -20,6 +21,56 @@ from huggingface_hub import hf_hub_download
 
 MAX_IMAGES = 150
 
+def clear_directory(directory):
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.remove(file_path)  # Xóa tệp hoặc link
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)  # Xóa thư mục con
+        except Exception as e:
+            print(f'Failed to delete {file_path}. Reason: {e}')
+
+# Hàm xóa cache và nội dung bên trong thư mục outputs
+def clear_cache():
+    cache_dir = os.path.expanduser(r'~\AppData\Local\Temp\gradio')  # Thư mục cache cần xóa
+    program_root = os.path.dirname(os.path.abspath(__file__))  # Thư mục gốc của chương trình
+    outputs_dir = os.path.join(program_root, 'outputs')  # Thư mục outputs nằm trong thư mục chính của chương trình
+
+    # Xóa thư mục cache
+    if os.path.exists(cache_dir):
+        try:
+            shutil.rmtree(cache_dir)  # Xóa toàn bộ thư mục cache
+            cache_status = "Cache folder and "
+        except Exception as e:
+            cache_status = f"Error clearing cache: {str(e)}"
+    else:
+        cache_status = "Cache folder not found."
+
+    # Xóa nội dung bên trong thư mục outputs, nhưng giữ lại thư mục outputs
+    if os.path.exists(outputs_dir):
+        try:
+            clear_directory(outputs_dir)  # Xóa toàn bộ nội dung bên trong outputs
+            outputs_status = "Outputs cleared successfully!"
+        except Exception as e:
+            outputs_status = f"Error clearing outputs: {str(e)}"
+    else:
+        outputs_status = "Outputs folder not found."
+
+    # Trả về thông báo tổng hợp
+    return gr.Info(f"{cache_status} {outputs_status}", duration=3)
+
+# Hàm mở thư mục outputs trong Windows Explorer
+def open_output_folder():
+    program_root = os.path.dirname(os.path.abspath(__file__))  # Thư mục gốc của chương trình
+    outputs_dir = os.path.join(program_root, 'outputs')  # Thư mục outputs
+    if os.path.exists(outputs_dir):
+        subprocess.run(f'explorer "{outputs_dir}"')  # Mở thư mục trong Windows Explorer
+        return f"Opened Outputs folder: {outputs_dir}"
+    else:
+        return "Outputs folder not found."
+    
 def load_captioning(uploaded_files, concept_sentence):
     uploaded_images = [file for file in uploaded_files if not file.endswith('.txt')]
     txt_files = [file for file in uploaded_files if file.endswith('.txt')]
@@ -410,13 +461,13 @@ h1{font-family: georgia; font-style: italic; font-weight: bold; font-size: 30px;
 h3{margin-top: 0}
 .tabitem{border: 0px}
 .group_padding{}
-nav{position: fixed; top: 0; left: 0; right: 0; z-index: 1000; text-align: center; padding: 10px; box-sizing: border-box; display: flex; align-items: center; backdrop-filter: blur(10px); }
+nav{position: fixed; top: 0; left: 0; right: 0; z-index: 1000; text-align: center; padding: 10px; box-sizing: border-box; display: flex; align-items: center; backdrop-filter: none; }
 nav button { background: none; color: firebrick; font-weight: bold; border: 2px solid firebrick; padding: 5px 10px; border-radius: 5px; font-size: 14px; }
 nav img { height: 40px; width: 40px; border-radius: 40px; }
 nav img.rotate { animation: rotate 2s linear infinite; }
 .flexible { flex-grow: 1; }
 .tast-details { margin: 10px 0 !important; }
-.toast-wrap { bottom: var(--size-4) !important; top: auto !important; border: none !important; backdrop-filter: blur(10px); }
+.toast-wrap { bottom: var(--size-4) !important; top: auto !important; border: none !important; backdrop-filter: none; }
 .toast-title, .toast-text, .toast-icon, .toast-close { color: black !important; font-size: 14px; }
 .toast-body { border: none !important; }
 #terminal { box-shadow: none !important; margin-bottom: 25px; background: rgba(0,0,0,0.03); }
@@ -425,6 +476,55 @@ nav img.rotate { animation: rotate 2s linear infinite; }
 #container { margin-top: 50px; }
 .hidden { display: none !important; }
 .codemirror-wrapper .cm-line { font-size: 12px !important; }
+.logo-and-text {
+    display: flex;
+    justify-content: center; /* Canh giữa logo và text theo chiều ngang */
+    align-items: center; /* Canh giữa theo chiều dọc */
+    gap: 10px; /* Khoảng cách giữa logo và text */
+    margin: 0 auto; /* Căn giữa toàn bộ khối */
+    text-align: center;
+}
+
+.text h1, .text h3 {
+    margin: 0;
+    text-align: center; /* Đảm bảo text được canh giữa */
+}
+button#clear-cache, button#output-folder {
+    background-color: #515253; /* Màu nền cho nút */
+    color: white; /* Màu chữ */
+    border: none; /* Loại bỏ đường viền */
+    padding: 10px 20px; /* Khoảng cách giữa nội dung và cạnh nút */
+    text-align: center; /* Canh giữa nội dung nút */
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 5px 2px;
+    cursor: pointer;
+    border-radius: 5px; /* Bo tròn góc nút */
+}
+
+button#clear-cache:hover, button#output-folder:hover {
+    background-color: #45a049; /* Đổi màu khi hover chuột */
+}
+#warning-text {
+    text-align: center; /* Canh giữa nội dung cảnh báo */
+    font-weight:normal;
+    color: red; /* Đổi màu chữ thành màu đỏ */
+}
+/* Thanh ngang trang trí */
+.divider {
+    border-top: 2px solid #D3D3D3; /* Đường kẻ ngang màu xám */
+    margin: 20px 0; /* Khoảng cách trên dưới */
+    text-align: center; /* Căn giữa nội dung văn bản */
+}
+
+.divider span {
+    background-color: white; /* Màu nền cho text, cùng màu nền trang web để nhìn nổi bật */
+    padding: 0 10px; /* Khoảng cách giữa chữ và đường kẻ */
+    color: #808080; /* Màu chữ xám */
+    font-weight: bold; /* Chữ đậm */
+}
+
 """
 
 js = """
@@ -458,12 +558,40 @@ function() {
 with gr.Blocks(elem_id="app", theme=theme, css=css, fill_width=True) as demo:
     output_components = []
     with gr.Row():
-        gr.HTML("""<nav>
-    <img id='logo' src='/file=icon.png' width='80' height='80'>
-    <div class='flexible'></div>
-    <button id='autoscroll' class='on hidden'></button>
-</nav>
-""")
+        gr.HTML("""
+            <div class="logo-and-text">
+                <img id='logo' src='/file=icon.png' width='80' height='80'>
+                <div class="text">
+                    <h1>LoRA Ease for FLUX  🦟 🦟 🦟</h1>
+                    <h3>Train a high quality FLUX LoRA in a breeze. Forked from FluxGym by Andy N Le ༄</h3>
+                </div>
+            </div>
+        """)   
+    # Tạo hàng với 3 cột: Cột trái rỗng, cột giữa chứa nút, cột phải rỗng
+    with gr.Row():
+        with gr.Column(scale=1):  # Cột bên trái (rỗng)
+            pass
+
+        with gr.Column(scale=1, elem_id="center-column"):  # Cột giữa chứa nút
+            with gr.Row():
+                clear_cache_button = gr.Button("Clear Cache", elem_id="clear-cache")
+                output_folder_button = gr.Button("Output folder", elem_id="output-folder")
+
+        with gr.Column(scale=1):  # Cột bên phải (rỗng)
+            pass
+
+
+    # Dòng cảnh báo với HTML và màu đỏ
+    gr.HTML('<p style="text-align: center; color: red; font-weight: bold;">Warning: Be careful! By clicking "Clear Cache" button, you will delete all contents inside the Outputs folder!</p>')
+    
+    # Thanh ngang trang trí với chữ "trang trí"
+    #gr.HTML('<div class="divider"><span>trang trí</span></div>')
+
+    # Kết nối nút với hàm xóa cache
+    clear_cache_button.click(fn=clear_cache, inputs=[], outputs=[])
+    # Kết nối nút "Output folder" để mở thư mục
+    output_folder_button.click(fn=open_output_folder, inputs=[], outputs=[])
+
     with gr.Row(elem_id='container'):
         with gr.Column():
             gr.Markdown(
@@ -648,4 +776,4 @@ with gr.Blocks(elem_id="app", theme=theme, css=css, fill_width=True) as demo:
 
 if __name__ == "__main__":
     cwd = os.path.dirname(os.path.abspath(__file__))
-    demo.launch(inbrowser=True,show_error=True, allowed_paths=[cwd],share=True)
+    demo.launch(inbrowser=True,show_error=True, allowed_paths=[cwd],share=False)
